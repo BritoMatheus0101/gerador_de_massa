@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Área COBOL</title>
+    <style>
+        /* Estilos mantidos das versões anteriores */
+        body { font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; background-color: #f8f9fa;}
+        h1 { color: #343a40; }
+        .container { display: flex; flex: 1; gap: 15px; min-height: 0; }
+        .panel { flex: 1; border: 1px solid #ccc; padding: 15px; display: flex; flex-direction: column; overflow-y: auto; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,.05);}
+        .panel h2 { margin-top: 0; font-size: 1.3em; border-bottom: 1px solid #eee; padding-bottom: 8px; color: #495057; }
+        textarea { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 0.95em; padding: 8px; border: 1px solid #ced4da; border-radius: 4px; }
+        #copybookInput { flex-grow: 1; min-height: 180px; resize: vertical;}
+        #fieldsContainer { margin-bottom: 15px;}
+        #fieldsContainer label { display: block; margin-top: 10px; font-weight: bold; font-size: 0.95em; color: #555; }
+        #fieldsContainer input[type="text"] { width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 8px; font-family: monospace; font-size: 0.9em; border: 1px solid #ced4da; border-radius: 4px;}
+        #outputAreaContainer { display: flex; flex-direction: column; flex-grow: 1; margin-top: 15px; }
+        #outputAreaContainer h3 { margin-bottom: 8px; font-size: 1.1em; font-weight: normal; color: #333; border-bottom: 1px dashed #eee; padding-bottom: 5px;}
+        #outputArea { min-height: 120px; background-color: #e9ecef; border: 1px solid #dee2e6; padding: 10px; white-space: pre; overflow-wrap: break-word; flex-grow: 1; font-family: monospace; font-size: 0.95em; border-radius: 4px; overflow-x: auto;}
+        .field-group { border-bottom: 1px dashed #e9ecef; padding-bottom: 10px; margin-bottom: 10px;}
+        .field-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0;}
+        .group-item-info {
+            font-style: italic;
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 15px;
+            padding: 8px 5px;
+            border-left: 4px solid #007bff;
+            background-color: #e9f2ff;
+            border-radius: 4px;
+        }
+        button { padding: 10px 20px; margin-top: 15px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 1em; transition: background-color 0.2s ease;}
+        button:hover { background-color: #0056b3; }
+        .save-section { margin-top: 20px; border-top: 1px solid #dee2e6; padding-top: 15px; background-color: #f8f9fa; padding: 15px; border-radius: 8px;}
+        .save-section h2 { font-size: 1.2em; color: #495057; margin-top: 0; border-bottom: none; padding-bottom: 0;}
+        .save-section label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.95em; color: #555;}
+        .save-section input[type="text"], .save-section textarea { width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 10px; border: 1px solid #ced4da; border-radius: 4px;}
+
+        .info-box {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #007bff;
+            background-color: #e9f2ff;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #343a40;
+        }
+         .info-box h4 { margin-top: 0; color: #0056b3; }
+         .info-box code { background-color: #cfe2ff; padding: 2px 4px; border-radius: 3px; }
+         .info-box ul { margin-bottom: 0; padding-left: 20px; }
+         .info-box li { margin-bottom: 5px;}
+
+
+    </style>
+</head>
+<body>
+
+<h1>Gerador de Área COBOL</h1>
+
+<div class="container">
+    <div class="panel">
+        <h2>1. Cole a Book (Layout COBOL)</h2>
+        <textarea id="copybookInput" placeholder="Cole seu layout COBOL aqui. Ex:
+01 REGISTRO-TESTE.
+   05 CAMPO-A PIC X(10).
+   05 CAMPO-B PIC S9(5)V99 COMP-3.
+   05 CAMPO-C PIC 9(7)V9(2) COMP.
+   05 CAMPO-D USAGE COMP-1.
+   05 FILLER PIC X(5).
+"></textarea>
+        <button onclick="processarBook()">Processar Book</button>
+    </div>
+
+    <div class="panel">
+        <h2>2. Preencha os Campos</h2>
+        <div id="fieldsContainer">
+            <p>Cole a book e clique em "Processar Book".</p>
+        </div>
+        <button onclick="gerarArea()">Gerar Área de Entrada</button>
+
+        <h2>3. Área Gerada</h2>
+        <div id="outputAreaContainer">
+           <pre id="outputArea">(Área formatada aparecerá aqui)</pre>
+        </div>
+
+        <div class="save-section">
+            <h2>4. Salvar em TXT</h2>
+            <label for="saveTitle">Título:</label>
+            <input type="text" id="saveTitle" placeholder="Ex: Teste Cadastro Cliente X">
+            <label for="saveDescription">Descrição:</label>
+            <textarea id="saveDescription" rows="3" placeholder="Ex: Massa de dados para teste do cenário de cliente novo..."></textarea>
+            <button onclick="salvarTXT()">Salvar em TXT</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let parsedFields = []; // Armazena TODOS os itens da book (grupos e elementares)
+
+    // Função para calcular o tamanho real do campo baseado na PIC e USAGE
+    function calculateSize(picTypeBase, intLen, decLen, usage) {
+        const totalDigits = intLen + decLen;
+
+        // USAGEs que têm tamanho fixo ou definido apenas pelo USAGE
+        switch (usage) {
+            case 'COMP1': // Removemos o hífen para facilitar o switch, re-adicionamos para display
+                return 4;
+            case 'COMP2': // Removemos o hífen
+                return 8;
+            case 'INDEX':
+            case 'POINTER':
+                 // Tamanho comum, mas pode variar por implementação
+                 return 4; // Assumindo tamanho de 4 bytes (comum em muitos mainframes)
+            case 'DISPLAY':
+                 // DISPLAY size is handled below based on PIC details
+                 break;
+            case 'COMP3':
+            case 'COMP4':
+            case 'BINARY':
+            case 'PACKEDDECIMAL':
+                 // These are handled below based on PIC details
+                 break;
+            default:
+                // Para USAGEs desconhecidos ou não especificados, assume DISPLAY
+                console.warn(`USAGE IS ${usage} desconhecido ou não especificado, assumindo tamanho DISPLAY.`);
+                return totalDigits; // Fallback para tamanho DISPLAY se USAGE não reconhecido
+        }
+
+         // USAGEs que dependem da PIC (DISPLAY, COMP, COMP-3, etc.)
+        switch (usage) {
+            case 'DISPLAY':
+                // Para DISPLAY, o tamanho é simplesmente a soma dos dígitos (X, 9, A).
+                // O sinal 'S' na PIC é sobreposto e não adiciona um byte.
+                return totalDigits;
+            case 'COMP':
+            case 'COMP4': // Removemos o hífen
+            case 'BINARY':
+                // Inteiro binário. Tamanho depende do número total de dígitos.
+                // 'S' não afeta o tamanho.
+                // Assumindo intLen >= 1 pois regex exige (\d+).
+                if (totalDigits <= 4) return 2; // 9(1) a 9(4)
+                if (totalDigits <= 9) return 4; // 9(5) a 9(9)
+                if (totalDigits <= 18) return 8; // 9(10) a 9(18)
+                // Mais de 18 dígitos requer extensão ou múltiplos campos.
+                console.warn(`COMP/BINARY com ${totalDigits} dígitos excede 18, pode requerer extensão (size 8+).`);
+                return 8; // Retorna 8 para > 18 como um fallback comum
+
+
+            case 'COMP3': // Removemos o hífen
+            case 'PACKEDDECIMAL': // Removemos o hífen
+                // Packed decimal. Tamanho = Teto((dígitos + 1) / 2).
+                // +1 é para o nibble do sinal.
+                if (totalDigits === 0 && (picTypeBase === '9' || picTypeBase === 'A')) return 1; // PIC 9(0) COMP-3 likely 1 byte
+                if (totalDigits === 0) return 0; // Should not happen with PIC regex
+                return Math.ceil((totalDigits + 1) / 2);
+
+             default:
+                 // This fallback should ideally not be reached if the first switch covers all usages,
+                 // but as a safety for unexpected flow.
+                 console.error(`Fallback calculation reached for USAGE: ${usage}. Assuming 0 size.`);
+                 return 0;
+        }
+    }
+
+     // Função para preparar o valor de entrada para a saída final, aplicando formatação/preenchimento baseado em PIC e USAGE
+     function prepareValueForOutput(fieldInfo, inputValue) {
+         let value = inputValue !== null && inputValue !== undefined ? inputValue.toString() : '';
+         const totalLength = fieldInfo.totalLength;
+         const usage = fieldInfo.usage; // Use usage directly from fieldInfo
+
+         // Handle USAGEs whose internal representation cannot be text
+         switch (usage) {
+             case 'COMP1':
+             case 'COMP2':
+             case 'COMP':
+             case 'COMP3':
+             case 'COMP4':
+             case 'BINARY':
+             case 'PACKEDDECIMAL':
+             case 'INDEX':
+             case 'POINTER':
+                 // Cannot represent binary/packed data accurately in text output.
+                 // Output the input value padded with spaces to the calculated size.
+                 // This indicates the space allocated, not the content.
+                 // Ensure the input value doesn't exceed the display length before padding/truncating
+                 let displayValue = value.slice(0, totalLength); // Truncate input text if too long for display
+                 let padChar = ' '; // Default pad with space
+                 return displayValue.padEnd(totalLength, padChar); // Pad with space to allocated size
+         }
+
+
+         // Handle DISPLAY USAGE (which includes X, 9, A)
+         if (usage === 'DISPLAY') {
+             if (fieldInfo.picTypeBase === 'X' || fieldInfo.picTypeBase === 'A') {
+                 // Alfanumérico DISPLAY (X ou A)
+                 // Pad direito com espaços, truncar se necessário
+                 return value.padEnd(totalLength, ' ').slice(0, totalLength);
+             } else if (fieldInfo.picTypeBase === '9') {
+                 // Numérico DISPLAY (9 ou S9)
+                 // Formatar como string de dígitos, preenchido com zeros.
+                 // O sinal overpunched não é representado em texto ASCII/UTF-8 simples.
+                 // O ponto/vírgula decimal também é removido na representação interna.
+
+                 // Remove caracteres não numéricos exceto o primeiro ponto ou vírgula para decimal
+                 value = value.replace(/,/g, '.'); // Troca vírgula por ponto
+                 let decimalPointIndex = value.indexOf('.');
+                 let integerPart = '';
+                 let decimalPart = '';
+                 // Check for negative sign ONLY if PIC includes S
+                 let isNegative = fieldInfo.picType.startsWith('S') && value.trim().startsWith('-');
+
+                 if (isNegative) {
+                    value = value.trim().substring(1); // Remove leading '-' for parsing
+                     decimalPointIndex = value.indexOf('.'); // Re-find decimal point after removing '-'
+                 }
+
+
+                 if (decimalPointIndex === -1) { // No decimal point found
+                     integerPart = value.replace(/[^\d]/g, ''); // Keep only digits
+                     decimalPart = '';
+                 } else {
+                     integerPart = value.substring(0, decimalPointIndex).replace(/[^\d]/g, '');
+                     decimalPart = value.substring(decimalPointIndex + 1).replace(/[^\d]/g, '');
+                 }
+
+                 // Apply padding/truncation based on PIC definition lengths
+                 // Integer part: pad left with '0', truncate left
+                 integerPart = integerPart.padStart(fieldInfo.integerLength, '0');
+                 if (integerPart.length > fieldInfo.integerLength) {
+                     integerPart = integerPart.slice(-fieldInfo.integerLength);
+                 }
+
+                 // Decimal part: pad right with '0', truncate right
+                 if (fieldInfo.decimalLength > 0) {
+                     decimalPart = decimalPart.padEnd(fieldInfo.decimalLength, '0');
+                     if (decimalPart.length > fieldInfo.decimalLength) {
+                         decimalPart = decimalPart.slice(0, fieldInfo.decimalLength);
+                     }
+                 } else {
+                     decimalPart = ''; // No decimal part if PIC doesn't have V
+                 }
+
+                 let finalDigits = integerPart + decimalPart;
+
+                 // COBOL DISPLAY handles sign via overpunch on the last digit.
+                 // Representing overpunch in simple text is not standard/portable.
+                 // We return just the padded/truncated digits string occupying totalLength.
+
+                 // Ensure the final string is exactly totalLength
+                 if (finalDigits.length !== totalLength) {
+                     // This should not happen if logic is correct, but as safety:
+                     console.warn(`Formatted numeric value length (${finalDigits.length}) != totalLength (${totalLength}) for ${fieldInfo.name}. Adjusting.`);
+                      if (finalDigits.length > totalLength) {
+                          finalDigits = finalDigits.slice(0, totalLength);
+                      } else {
+                           // This case (short) is less likely with padding, but handle anyway
+                           // Pad with 0 for numeric DISPLAY if somehow short
+                          finalDigits = finalDigits.padEnd(totalLength, '0');
+                      }
+                 }
+
+                 return finalDigits;
+             }
+         }
+
+         // Should not reach here if all usages and DISPLAY base types are handled
+         console.error(`Unhandled field type/usage combination for formatting: ${fieldInfo.name}, USAGE: ${usage}, PIC Base: ${fieldInfo.picTypeBase}`);
+         return value.padEnd(totalLength, '?').slice(0, totalLength); // Pad with '?' to indicate error
+     }
+
+
+    function processarBook() {
+        const copybookText = document.getElementById('copybookInput').value;
+        const lines = copybookText.split('\n');
+        const fieldsContainer = document.getElementById('fieldsContainer');
+        fieldsContainer.innerHTML = ''; // Limpa campos anteriores
+        parsedFields = []; // Limpa array de itens
+
+        // Regex para identificar itens elementares definidos APENAS por USAGE COMP-1/COMP-2 (sem PIC explícita)
+        // Grupo 1: Nome do Campo ([\w-]+)
+        // Grupo 2: USAGE type (COMP-1 ou COMP-2) - Captura a string COMP-1 ou COMP-2
+        const usageOnlyRegex = /^\s*\d+\s+([\w-]+)\s+USAGE(?:\s+IS)?\s+(COMP-1|COMP-2)\s*?\.?\s*$/i;
+
+         // Regex para analisar a STRING CAPTURADA da PIC
+         // Aplicada *após* a fieldWithPicRegex casar a linha
+         // Grupo 1: Sinal S (S?)
+         // Grupo 2: Tipo Base (X, 9 ou A) ([X9A])
+         // Grupo 3: Tamanho Inteiro (\d+)
+         // Grupo 4: A presença do V (V)?
+         // Grupo 5: String de 9s após V (9+) - Para formato V999. Ex: '99' em V99.
+         // Grupo 6: Dígitos dentro de V9(n) (\d+) - Para formato V9(n). Ex: '2' em V9(2).
+         // A regex de PIC string precisa ser flexível para aceitar V, V9+, V9(n) e V sozinho.
+         // Tentativa: ^(S?)([X9A])\((\d+)\)(V(?:(9+)|9\((\d+)\))?)?$  -- Não, isso exige dígitos após V ou ().
+         // Tentativa 2: ^(S?)([X9A])\((\d+)\)(V(9+|\((\d+)\))?)?$ -- Mesma falha.
+         // Tentativa 3: Capturar V e TUDO que vem depois na PIC string.
+         // Capturar a PIC string completa primeiro.
+         const picStringParseRegex = /^(S?)([X9A])\((\d+)\)(V)?(?:(9+)|9\((\d+)\))?$/i;
+
+
+        // Regex principal para capturar ITENS ELEMENTARES COM PIC.
+        // Captura: Nível, Nome, STRING PIC, VALUE, USAGE opcional.
+        // Grupo 1: Nome do Campo ([\w-]+)
+        // Grupo 2: STRING COMPLETA DA PIC ([^\s.]+) - tudo após PIC até espaço/ponto
+        // Grupo 3: String Literal no VALUE ('([^']*)')
+        // Grupo 4: Numérico Literal no VALUE ([+-]?\d+(?:\.\d+)?)
+        // Grupo 5: Constante Figurativa no VALUE (SPACES?|ZEROES?|ZEROS?)
+        // Grupo 6: USAGE type ([\w-]+)
+        const fieldWithPicRegex = /^\s*\d+\s+([\w-]+)\s+PIC\s+([^\s.]+)\s*(?:\s+VALUE\s+(?:'([^']*)'|([+-]?\d+(?:\.\d+)?)|(SPACES?|ZEROES?|ZEROS?)))?(?:\s+USAGE(?:\s+IS)?\s+([\w-]+))?\s*?\.?\s*$/i;
+
+
+        // Regex para GRUPOS: Captura Nível e Nome (sem PIC nem USAGE reconhecido como elementar)
+        const groupRegex = /^\s*(\d+)\s+([\w-]+)\s*\.?\s*$/;
+
+
+        lines.forEach((line, index) => {
+            line = line.trim(); // Remove espaços extras no início/fim
+            if (!line || line.startsWith('*') || line.match(/^\s*\d+\s+88\s+[\w-]+\s+VALUE/i)) return; // Ignora linhas vazias, comentários ou 88 levels
+
+            let fieldInfo = null; // Objeto para armazenar info do campo elementar
+
+            let usageOnlyMatch = line.match(usageOnlyRegex);
+            let fieldWithPicMatch = !usageOnlyMatch ? line.match(fieldWithPicRegex) : null;
+            let groupMatch = !usageOnlyMatch && !fieldWithPicMatch ? line.match(groupRegex) : null;
+
+
+            if (usageOnlyMatch) {
+                 // É um item elementar USAGE-only (COMP-1 ou COMP-2)
+                 const fieldName = usageOnlyMatch[1];
+                 const usage = usageOnlyMatch[2].toUpperCase().replace(/-/g, ''); // Remove '-'
+
+                 // Para USAGE-only, PIC info é conceitualmente 0 ou irrelevante para tamanho/formato aqui
+                 const picType = '';
+                 const picTypeBase = ''; // No base type
+                 const integerLength = 0;
+                 const decimalLength = 0;
+                 const totalLength = calculateSize(picTypeBase, integerLength, decimalLength, usage); // Calculate size based on usage only
+
+                 fieldInfo = {
+                     lineIndex: index,
+                     type: 'ELEMENTARY',
+                     name: fieldName,
+                     picType: picType,
+                     picTypeBase: picTypeBase,
+                     integerLength: integerLength,
+                     decimalLength: decimalLength,
+                     usage: usage,
+                     totalLength: totalLength,
+                     isFiller: false, // USAGE items are typically not FILLER
+                     initialValue: ''.padEnd(totalLength, ' '), // Default to spaces for these types
+                     rawValue: null // No VALUE clause here
+                 };
+
+            } else if (fieldWithPicMatch) {
+                // É um item elementar com PIC
+                const fieldName = fieldWithPicMatch[1];
+                const picString = fieldWithPicMatch[2]; // Captura a string completa da PIC (Ex: "S9(15)V")
+
+                // Agora, analise a string da PIC capturada usando a segunda regex
+                const picParseMatch = picString.match(picStringParseRegex);
+
+                if (!picParseMatch) {
+                    console.warn(`PIC string não reconhecida para ${fieldName}: ${picString}. Pulando campo.`);
+                    return; // Pula esta linha se a string PIC não puder ser analisada
+                }
+
+                const fieldSign = picParseMatch[1] ? 'S' : '';
+                const fieldTypeBase = picParseMatch[2].toUpperCase(); // X, 9, ou A
+                const integerLength = parseInt(picParseMatch[3], 10);
+                const hasV = !!picParseMatch[4]; // Verdadeiro se o 'V' existe na string PIC
+
+                // Determine decimal length from either V9+ (Group 5) or V9(n) (Group 6) *dentro da string PIC*
+                const decimalLength = hasV ? (picParseMatch[5] ? picParseMatch[5].length :
+                                      (picParseMatch[6] ? parseInt(picParseMatch[6], 10) : 0)) : 0;
+
+                 // Se V está presente mas não há dígitos decimais especificados (ex: PIC 9(5)V),
+                 // a interpretação usual é 0 casas decimais. A regex acima trata isso.
+
+                const picType = fieldSign + fieldTypeBase; // e.g., S9, 9, X, SA
+
+                // Capture VALUE and USAGE from the main regex match
+                // Grupos do fieldWithPicRegex: 1=Name, 2=PicString, 3=ValueStringLit, 4=ValueNumericLit, 5=ValueFigurative, 6=Usage
+                const stringLiteral = fieldWithPicMatch[3];
+                const numericLiteral = fieldWithPicMatch[4];
+                const figurativeConstant = fieldWithPicMatch[5];
+                const usage = fieldWithPicMatch[6] ? fieldWithPicMatch[6].toUpperCase().replace(/-/g, '') : 'DISPLAY'; // Default is DISPLAY, remove '-'
+
+
+                // Calculate total size based on PIC and USAGE
+                const totalLength = calculateSize(fieldTypeBase, integerLength, decimalLength, usage);
+
+                let defaultValue = null;
+                let defaultValueRaw = null; // Guarda o valor como veio do VALUE
+
+                // Processa VALUE clause
+                 if (stringLiteral !== undefined) {
+                     defaultValueRaw = stringLiteral;
+                     // Use prepareValueForOutput to format the initial value correctly for its type/usage
+                     defaultValue = prepareValueForOutput({
+                         name: fieldName, // Pass name for logging
+                         picType: picType,
+                         picTypeBase: fieldTypeBase,
+                         integerLength: integerLength,
+                         decimalLength: decimalLength,
+                         totalLength: totalLength,
+                         usage: usage
+                     }, stringLiteral);
+                 } else if (numericLiteral !== undefined) {
+                     defaultValueRaw = numericLiteral;
+                     // For numeric fields, format the numeric literal according to PIC/USAGE for display
+                     defaultValue = prepareValueForOutput({ // Pass partial fieldInfo
+                         name: fieldName, // Pass name for logging
+                         picType: picType,
+                         picTypeBase: fieldTypeBase,
+                         integerLength: integerLength,
+                         decimalLength: decimalLength,
+                         totalLength: totalLength, // Use calculated size
+                         usage: usage
+                     }, numericLiteral);
+
+                 } else if (figurativeConstant !== undefined) {
+                     defaultValueRaw = figurativeConstant;
+                     const figConst = figurativeConstant.toUpperCase();
+                     let figValue = '';
+                     if (figConst === 'SPACES' || figConst === 'SPACE') {
+                         figValue = ''.padEnd(totalLength, ' ');
+                     } else if (figConst === 'ZEROS' || figConst === 'ZERO' || figConst === 'ZEROES') {
+                          figValue = ''.padStart(totalLength, '0');
+                     } else {
+                          // Other figurative constants not fully supported, default to spaces
+                          console.warn(`Constante figurativa "${figurativeConstant}" não totalmente suportada para ${fieldName}, usando espaços.`);
+                          figValue = ''.padEnd(totalLength, ' ');
+                     }
+                     // Apply formatting for the determined figurative value string
+                     // Trim the figValue before passing so prepareValueForOutput can re-pad/truncate correctly based on type/usage
+                     defaultValue = prepareValueForOutput({
+                         name: fieldName, // Pass name for logging
+                         picType: picType,
+                         picTypeBase: fieldTypeBase,
+                         integerLength: integerLength,
+                         decimalLength: decimalLength,
+                         totalLength: totalLength,
+                         usage: usage
+                     }, figValue.trim());
+                 } else {
+                     // No VALUE clause - default padding based on type and usage
+                      let initialPadChar = (fieldTypeBase === '9' && usage === 'DISPLAY') || usage === 'COMP3' ? '0' : ' ';
+                      defaultValue = ''.padEnd(totalLength, initialPadChar); // Pad with '0' for DISPLAY 9/S9 and COMP-3, ' ' for X/A and others
+                 }
+
+
+                const isFiller = fieldName.toUpperCase() === 'FILLER';
+
+                fieldInfo = {
+                    lineIndex: index,
+                    type: 'ELEMENTARY', // Identifica como item elementar
+                    name: fieldName,
+                    picType: picType, // S9, 9, X, SA (includes S)
+                    picTypeBase: fieldTypeBase, // X, 9, or A
+                    integerLength: integerLength,
+                    decimalLength: decimalLength,
+                    usage: usage, // Store usage (uppercase, no hyphen)
+                    totalLength: totalLength, // Store calculated size
+                    isFiller: isFiller,
+                    initialValue: defaultValue, // Valor formatado para input
+                    rawValue: defaultValueRaw // Valor original do VALUE (para referência)
+                };
+
+            } else if (groupMatch) {
+                // É um item de grupo (sem PIC nem USAGE reconhecido como elementar)
+                 const level = groupMatch[1];
+                 const groupName = groupMatch[2];
+                 // We don't store group length here directly, it's the sum of its elementary items.
+                 // We also don't add inputs for groups as they are structural.
+                 parsedFields.push({
+                     lineIndex: index,
+                     type: 'GROUP', // Identifica como item de grupo
+                     level: level,
+                     name: groupName,
+                     // Group totalLength would be calculated by summing child elementary items' totalLength
+                     // This is not needed for the current text generation which just concatenates elementary items.
+                     totalLength: 0 // Mark groups with 0 length for this specific purpose
+                 });
+                 // Add a visual indication for groups in the form
+                 const groupInfo = document.createElement('div');
+                 groupInfo.classList.add('group-item-info');
+                 groupInfo.textContent = `${level} ${groupName}`;
+                 fieldsContainer.appendChild(groupInfo); // Add group visual separator
+            } else {
+                 // Line did not match any known pattern (elementary or group)
+                 console.warn(`Linha ${index + 1} não reconhecida: ${line}`);
+                 // Optionally add an indicator for unparseable lines in the UI
+            }
+
+            // --- Cria os elementos HTML para o campo elementar, se encontrado ---
+            if (fieldInfo && fieldInfo.type === 'ELEMENTARY') {
+                parsedFields.push(fieldInfo); // Add elementary field info to the array
+
+                const fieldDiv = document.createElement('div');
+                fieldDiv.classList.add('field-group');
+
+                const label = document.createElement('label');
+                label.htmlFor = `field_${index}`;
+
+                // Construct display string for PIC and USAGE
+                let picDisplay = '';
+                if (fieldWithPicMatch) { // Only add PIC display if it existed in the source line (matched fieldWithPicRegex)
+                     // Reconstruct PIC display from parsed components for consistency
+                     picDisplay = `PIC ${fieldInfo.picType}(${fieldInfo.integerLength})`;
+                     if (fieldInfo.decimalLength > 0 || (fieldWithPicMatch[2].toUpperCase().includes('V') && fieldInfo.decimalLength === 0)) { // Check if V was in original PIC string
+                          // If V was present but decimal length is 0, maybe display V9(0)? Or just V?
+                          // Let's display V9(n) format where n is the calculated decimalLength
+                          picDisplay += `V9(${fieldInfo.decimalLength})`;
+                     }
+                 }
+                let usageDisplay = fieldInfo.usage !== 'DISPLAY' ? ` USAGE ${fieldInfo.usage.replace(/(\w+)(\d)/, '$1-$2')}` : ''; // Re-add '-' for display
+
+                label.textContent = `${fieldInfo.name} (${picDisplay}${usageDisplay}) (Tam: ${fieldInfo.totalLength} bytes) :`;
+
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `field_${index}`;
+                input.dataset.fieldName = fieldInfo.name;
+                input.dataset.fieldIndex = index; // Usa o índice da linha original
+                 // Store all relevant field info on the input for easy access during generation
+                input.dataset.totalLength = fieldInfo.totalLength;
+                input.dataset.picType = fieldInfo.picType;
+                input.dataset.picTypeBase = fieldInfo.picTypeBase;
+                input.dataset.integerLength = fieldInfo.integerLength;
+                input.dataset.decimalLength = fieldInfo.decimalLength;
+                input.dataset.usage = fieldInfo.usage;
+
+                // Define placeholder and value inicial
+                input.value = fieldInfo.initialValue; // Use processed default value
+
+                let placeholder = `Tam: ${fieldInfo.totalLength} bytes`;
+                 if (fieldInfo.usage === 'DISPLAY') {
+                      if (fieldInfo.picTypeBase === 'X' || fieldInfo.picTypeBase === 'A') {
+                           placeholder = `Texto (Tam: ${fieldInfo.totalLength})`;
+                      } else if (fieldInfo.picTypeBase === '9'){ // Numeric DISPLAY
+                           placeholder = `Número (Tam: ${fieldInfo.totalLength}${fieldInfo.decimalLength > 0 ? ', V9(' + fieldInfo.decimalLength + ')' : ''})`;
+                           if (!fieldInfo.picType.startsWith('S')) placeholder += ' (Sem Sinal)';
+                           else placeholder += ' (Com Sinal)';
+                      }
+                 } else {
+                      // Placeholder for non-DISPLAY indicates USAGE and size, not input format expectation
+                      placeholder = `${fieldInfo.usage.replace(/(\w+)(\d)/, '$1-$2')} (Tam: ${fieldInfo.totalLength} bytes)`;
+                 }
+                 input.placeholder = placeholder;
+
+
+                // Disable maxLength for non-DISPLAY fields as text input doesn't match byte size directly.
+                // Keep maxLength only for DISPLAY X/A.
+                if (fieldInfo.usage === 'DISPLAY' && (fieldInfo.picTypeBase === 'X' || fieldInfo.picTypeBase === 'A')) {
+                    input.maxLength = fieldInfo.totalLength;
+                } else {
+                     input.removeAttribute('maxLength'); // Remove any default or previous maxLength
+                }
+
+                // Disable FILLER if it has a VALUE, or if it's a USAGE-only (no input needed)
+                 // USAGE-only fields don't need input from the user as their value cannot be typed directly
+                if (fieldInfo.isFiller && fieldInfo.rawValue !== null) {
+                     input.disabled = true;
+                }
+                // Decide if USAGE-only fields should be disabled for input
+                if (!fieldInfo.picTypeBase && (fieldInfo.usage === 'COMP1' || fieldInfo.usage === 'COMP2')) {
+                     input.disabled = true; // Disable input for USAGE COMP-1/2 without PIC
+                     input.value = `(${fieldInfo.usage.replace(/(\w+)(\d)/, '$1-$2')} - no input)`; // Indicate no input
+                }
+
+
+                fieldDiv.appendChild(label);
+                fieldDiv.appendChild(input);
+                fieldsContainer.appendChild(fieldDiv);
+            }
+            // Groups were already added to parsedFields and fieldsContainer directly when groupMatch was true
+
+        });
+
+        // Check if *any* elementary fields were parsed successfully
+        if (parsedFields.filter(f => f.type === 'ELEMENTARY').length === 0 &&
+             parsedFields.filter(f => f.type === 'GROUP').length === 0) // Also check if any groups were found, maybe book was empty/unparseable
+             {
+            fieldsContainer.innerHTML = '<p>Nenhuma linha de COBOL reconhecida como campo elementar ou grupo na book.</p>';
+        } else if (parsedFields.filter(f => f.type === 'ELEMENTARY').length === 0) {
+             fieldsContainer.innerHTML += '<p>Nenhum campo elementar (com PIC ou USAGE COMP-1/COMP-2 sem PIC) encontrado na book, mas grupos foram identificados.</p>';
+        }
+
+
+    }
+
+
+    function gerarArea() {
+        const outputArea = document.getElementById('outputArea');
+        let generatedString = "";
+        let currentTotalLength = 0;
+
+        // Sort parsedFields by lineIndex to generate output in book order
+        const sortedFields = [...parsedFields].sort((a, b) => a.lineIndex - b.lineIndex);
+
+        sortedFields.forEach((field) => {
+            // Pula itens de grupo
+            if (field.type === 'GROUP') {
+                return; // vai para o próximo item do loop
+            }
+
+            // Processa itens elementares
+            const inputElement = document.getElementById(`field_${field.lineIndex}`);
+
+            let valueToFormat;
+            if (inputElement && !inputElement.disabled) {
+                // Use the current value from the input unless it's disabled
+                 valueToFormat = inputElement.value;
+            } else if (field.isFiller && field.rawValue !== null) {
+                // Use the parsed initial value for FILLERs with VALUE
+                 valueToFormat = field.initialValue; // This is already formatted by prepareValueForOutput in processarBook
+            } else if (!field.picTypeBase && (field.usage === 'COMP1' || field.usage === 'COMP2')) {
+                // USAGE-only fields without PIC - they were disabled for input.
+                // We cannot generate their real value. Output spaces for the allocated size.
+                 valueToFormat = ''.padEnd(field.totalLength, ' '); // Fill with spaces to allocated size
+            }
+             else {
+                 // For other cases (e.g., fields without VALUE that became disabled for some reason,
+                 // or FILLER without VALUE), use the calculated length and pad with default.
+                 // The initialValue logic in processarBook should cover defaults, but this is a fallback.
+                  let defaultPadChar = (field.picTypeBase === '9' && field.usage === 'DISPLAY') || field.usage === 'COMP3' ? '0' : ' ';
+                 valueToFormat = ''.padEnd(field.totalLength, defaultPadChar);
+            }
+
+
+            // Use the prepareValueForOutput function to format the value based on field info
+            // If the field was disabled (like USAGE-only or FILLER with VALUE), valueToFormat is already its final string representation or default padded string.
+            const formattedValue = (inputElement && inputElement.disabled && !(field.isFiller && field.rawValue === null)) // Disabled input, AND not a FILLER without value
+                ? valueToFormat // Use valueToFormat directly if input was disabled AND it wasn't a FILLER without a VALUE (which needs space padding below)
+                : prepareValueForOutput({ // Otherwise, process the potentially raw user input or default
+                         name: field.name, // Pass name for logging
+                         picType: field.picType,
+                         picTypeBase: field.picTypeBase,
+                         integerLength: field.integerLength,
+                         decimalLength: field.decimalLength,
+                         totalLength: field.totalLength,
+                         usage: field.usage
+                    }, valueToFormat);
+
+
+            generatedString += formattedValue;
+            currentTotalLength += field.totalLength; // Use the stored calculated totalLength
+
+        });
+
+        outputArea.textContent = generatedString;
+
+        // Atualiza/Cria o header com o tamanho total calculado
+        const outputContainer = document.getElementById('outputAreaContainer');
+        let header = outputContainer.querySelector('h3');
+        if (!header) {
+            header = document.createElement('h3');
+            outputContainer.insertBefore(header, outputArea);
+        }
+        header.textContent = `Área Gerada (Tamanho Total Calculado: ${currentTotalLength} bytes)`;
+    }
+
+    function salvarTXT() {
+        // Função mantida da versão anterior - sem alterações
+        const title = document.getElementById('saveTitle').value.trim() || 'dados_mainframe';
+        const description = document.getElementById('saveDescription').value.trim();
+        const data = document.getElementById('outputArea').textContent;
+
+        if (!data || data === '(Área formatada aparecerá aqui)') {
+            alert("Gere a área de entrada antes de salvar.");
+            return;
+        }
+        let fileContent = `Título: ${title}\n`;
+        if (description) fileContent += `Descrição: ${description}\n`;
+        fileContent += "----------------------------------------\nDados Gerados:\n" + data;
+        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const safeFilename = title.replace(/[^a-z0-9_.-]/gi, '_') + '.txt';
+        link.download = safeFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+</script>
+
+</body>
+</html>
